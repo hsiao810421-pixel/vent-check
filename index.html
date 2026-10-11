@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>呼吸器點班系統</title>
+<style>
+:root{
+  --main:#035352; --text:#12312f; --sub:#4c6664; --line:#cfdcda; --bg:#edf1f0;
+  --fill:#dfeeea; --fill2:#c9e6e3; --warn:#8a5511; --err:#b4485b; --card:#fff;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:"微軟正黑體","Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif;font-size:15px}
+header{background:var(--main);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:20px;letter-spacing:.05em}
+.tabs{display:flex;gap:4px;padding:0 16px;background:var(--main)}
+.tabs button{border:0;background:transparent;color:#cfe5e2;padding:10px 18px;font:inherit;cursor:pointer;border-radius:8px 8px 0 0}
+.tabs button.on{background:var(--bg);color:var(--main);font-weight:bold}
+main{max-width:960px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:17px;color:var(--main)}
+.units{display:flex;flex-wrap:wrap;gap:6px}
+.units button{border:1px solid var(--line);background:#fff;color:var(--text);padding:6px 12px;border-radius:999px;font:inherit;cursor:pointer}
+.units button.on{background:var(--main);border-color:var(--main);color:#fff}
+.units button.todo{color:#9aa9a7}
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left}
+th{color:var(--sub);font-weight:normal;font-size:13px}
+td.bed{font-weight:bold;width:70px}
+select,input{font:inherit;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:#fff;height:34px}
+select{min-width:120px}
+input.num{width:120px}
+tr.used td{background:var(--fill)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
+.btn{border:0;border-radius:8px;padding:9px 18px;font:inherit;cursor:pointer;background:var(--main);color:#fff}
+.btn.ghost{background:#fff;color:var(--main);border:1px solid var(--main)}
+.muted{color:var(--sub);font-size:13px}
+.msg{color:var(--main);font-weight:bold}
+.empty{color:#9aa9a7;padding:24px;text-align:center}
+.sum td.n{text-align:center}
+.sum th.n{text-align:center}
+.sum tr.total td{font-weight:bold;border-top:2px solid var(--main)}
+.zero{color:#c2ccca}
+@media (max-width:600px){ select{min-width:96px} input.num{width:84px} .tabs button{padding:10px 12px} }
+</style>
+</head>
+<body>
+<header><h1>呼吸器點班系統</h1></header>
+<nav class="tabs">
+  <button data-tab="sum" class="on">總表</button>
+  <button data-tab="rep">各單位回報</button>
+</nav>
+<main>
+  <!-- 總表 -->
+  <section id="tab-sum">
+    <div class="card">
+      <h2>各單位設備總表</h2>
+      <div style="overflow-x:auto"><table class="sum" id="sumTable"></table></div>
+    </div>
+    <div class="card">
+      <h2>回報明細</h2>
+      <div id="sumDetail"></div>
+    </div>
+  </section>
+
+  <!-- 各單位回報 -->
+  <section id="tab-rep" hidden>
+    <div class="card">
+      <h2>選擇單位</h2>
+      <div class="units" id="unitBtns"></div>
+    </div>
+    <div class="card" id="repCard"></div>
+  </section>
+</main>
+
+<script>
+// ===== 設定 =====
+const UNITS = ['ER','PORA','PORB','PORC','CVCU','RCC','RICU','ICU1','ICU2','NSCU','4庫','9庫','檢查室'];
+
+// 各單位床位（尚未設定的單位留空陣列）
+const BEDS = {
+  ICU1: ['1','2','3','5','6','7','8','9','10','11','12','13','14','15','16','17','18'],
+};
+
+// 第一層設備；第二層：空陣列＝自由輸入數字，之後給清單就會自動變成下拉選單
+const DEVICES = {
+  PB840: [],
+  G5:    [],
+  BiPAP: [],
+  V60:   [],
+  HFNC:  [],
+};
+const DEV_NAMES = Object.keys(DEVICES);
+const STORE_KEY = 'ventCheck.v1';
+
+// ===== 資料 =====
+// { ICU1: { time:'...', beds:{ '1':{dev:'PB840', no:'3'} } } }
+let DB = {};
+try{ DB = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }catch(e){ DB = {}; }
+function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }catch(e){} }
+
+let curUnit = 'ICU1';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ===== 分頁 =====
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  $('#tab-sum').hidden = b.dataset.tab !== 'sum';
+  $('#tab-rep').hidden = b.dataset.tab !== 'rep';
+  if (b.dataset.tab === 'sum') renderSum();
+});
+
+// ===== 各單位回報 =====
+function renderUnitBtns(){
+  $('#unitBtns').innerHTML = UNITS.map(u =>
+    `<button data-u="${esc(u)}" class="${u===curUnit?'on':''} ${BEDS[u]?'':'todo'}">${esc(u)}</button>`).join('');
+  $('#unitBtns').querySelectorAll('button').forEach(b => b.onclick = () => { curUnit = b.dataset.u; renderUnitBtns(); renderRep(); });
+}
+
+function secondField(dev, val){
+  const opts = DEVICES[dev] || [];
+  if (!dev) return `<input class="num" disabled placeholder="—">`;
+  if (opts.length) return `<select class="num"><option value="">請選擇</option>${
+    opts.map(o => `<option ${String(o)===String(val)?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  return `<input class="num" type="number" inputmode="numeric" min="0" value="${esc(val||'')}" placeholder="輸入數字">`;
+}
+
+function renderRep(){
+  const beds = BEDS[curUnit];
+  const card = $('#repCard');
+  if (!beds){ card.innerHTML = `<h2>${esc(curUnit)} 回報</h2><div class="empty">此單位的回報欄位尚未設定</div>`; return; }
+  const saved = (DB[curUnit] && DB[curUnit].beds) || {};
+  card.innerHTML = `
+    <h2>${esc(curUnit)} 回報</h2>
+    <div class="muted" id="lastTime">${DB[curUnit] ? '上次回報：' + esc(DB[curUnit].time) : '尚未回報'}</div>
+    <table id="bedTable">
+      <thead><tr><th>床號</th><th>設備</th><th>編號</th></tr></thead>
+      <tbody>${beds.map(bed => {
+        const r = saved[bed] || {};
+        return `<tr data-bed="${esc(bed)}" class="${r.dev?'used':''}">
+          <td class="bed">${esc(bed)}</td>
+          <td><select class="dev"><option value="">— 無 —</option>${
+            DEV_NAMES.map(d => `<option ${d===r.dev?'selected':''}>${d}</option>`).join('')}</select></td>
+          <td class="sec">${secondField(r.dev, r.no)}</td></tr>`; }).join('')}
+      </tbody>
+    </table>
+    <div class="bar">
+      <button class="btn" id="submitBtn">送出回報</button>
+      <button class="btn ghost" id="clearBtn">清空本單位</button>
+      <span class="msg" id="msg"></span>
+    </div>`;
+
+  card.querySelectorAll('select.dev').forEach(sel => sel.onchange = () => {
+    const tr = sel.closest('tr');
+    tr.classList.toggle('used', !!sel.value);
+    tr.querySelector('.sec').innerHTML = secondField(sel.value, '');
+  });
+  $('#submitBtn').onclick = submit;
+  $('#clearBtn').onclick = () => {
+    if (!confirm(`確定清空 ${curUnit} 的所有回報？`)) return;
+    delete DB[curUnit]; save(); renderRep();
+  };
+}
+
+function submit(){
+  const beds = {};
+  document.querySelectorAll('#bedTable tbody tr').forEach(tr => {
+    const dev = tr.querySelector('select.dev').value;
+    const f = tr.querySelector('.sec .num');
+    if (dev) beds[tr.dataset.bed] = { dev, no: f ? f.value.trim() : '' };
+  });
+  const missing = Object.entries(beds).filter(([,r]) => !r.no).map(([b]) => b);
+  if (missing.length && !confirm(`床號 ${missing.join('、')} 尚未填編號，仍要送出？`)) return;
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  const time = `${d.getFullYear()-1911}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  DB[curUnit] = { time, beds }; save();
+  $('#lastTime').textContent = '上次回報：' + time;
+  $('#msg').textContent = `✓ 已送出（${Object.keys(beds).length} 台）`;
+}
+
+// ===== 總表 =====
+function renderSum(){
+  const tot = Object.fromEntries(DEV_NAMES.map(d => [d,0])); let all = 0;
+  const rows = UNITS.map(u => {
+    const cnt = Object.fromEntries(DEV_NAMES.map(d => [d,0]));
+    const rec = DB[u];
+    if (rec) Object.values(rec.beds).forEach(r => { if (cnt[r.dev] !== undefined){ cnt[r.dev]++; tot[r.dev]++; all++; } });
+    const sum = DEV_NAMES.reduce((a,d) => a + cnt[d], 0);
+    return `<tr><td><b>${esc(u)}</b></td>${DEV_NAMES.map(d => `<td class="n ${cnt[d]?'':'zero'}">${cnt[d]}</td>`).join('')}
+      <td class="n"><b>${sum}</b></td><td class="muted">${rec ? esc(rec.time) : (BEDS[u] ? '未回報' : '未設定')}</td></tr>`;
+  }).join('');
+  $('#sumTable').innerHTML = `<thead><tr><th>單位</th>${DEV_NAMES.map(d => `<th class="n">${d}</th>`).join('')}<th class="n">合計</th><th>回報時間</th></tr></thead>
+    <tbody>${rows}<tr class="total"><td>總計</td>${DEV_NAMES.map(d => `<td class="n">${tot[d]}</td>`).join('')}<td class="n">${all}</td><td></td></tr></tbody>`;
+
+  const det = UNITS.filter(u => DB[u] && Object.keys(DB[u].beds).length).map(u => {
+    const list = Object.entries(DB[u].beds).map(([b,r]) => `<tr><td class="bed">${esc(b)}</td><td>${esc(r.dev)}</td><td>${esc(r.no) || '<span class="zero">未填</span>'}</td></tr>`).join('');
+    return `<h2 style="margin-top:8px">${esc(u)}</h2><table><thead><tr><th>床號</th><th>設備</th><th>編號</th></tr></thead><tbody>${list}</tbody></table>`;
+  }).join('');
+  $('#sumDetail').innerHTML = det || '<div class="empty">目前沒有任何回報</div>';
+}
+
+renderUnitBtns(); renderRep(); renderSum();
+</script>
+</body>
+</html>
