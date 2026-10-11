@@ -14,11 +14,11 @@
 [hidden]{display:none !important}
 body{margin:0;background:var(--bg);color:var(--text);
   font-family:"微軟正黑體","Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif;font-size:15px}
-header{background:var(--main);color:#fff;padding:14px 16px}
-header h1{margin:0;font-size:20px;letter-spacing:.05em}
-.tabs{display:flex;gap:4px;padding:0 16px;background:var(--main)}
-.tabs button{border:0;background:transparent;color:#cfe5e2;padding:10px 18px;font:inherit;cursor:pointer;border-radius:8px 8px 0 0}
-.tabs button.on{background:var(--bg);color:var(--main);font-weight:bold}
+header{background:var(--main);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{margin:0;font-size:19px;letter-spacing:.05em;flex:1;white-space:nowrap}
+.tabs{display:flex;gap:2px;background:rgba(255,255,255,.12);padding:3px;border-radius:9px}
+.tabs button{border:0;background:transparent;color:#cfe5e2;padding:6px 14px;font:inherit;cursor:pointer;border-radius:7px}
+.tabs button.on{background:#fff;color:var(--main);font-weight:bold}
 main{max-width:960px;margin:0 auto;padding:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
 h2{margin:0 0 12px;font-size:17px;color:var(--main)}
@@ -31,10 +31,17 @@ th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left}
 th{color:var(--sub);font-weight:normal;font-size:13px}
 td.bed{font-weight:bold;width:70px}
 select,input{font:inherit;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:#fff;height:34px}
-select{min-width:120px}
-input.num{width:120px}
-tr.used td{background:var(--fill)}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
+/* 回報：床位格狀排列，手機兩欄一頁看完 */
+.rephead{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.rephead h2{margin:0}
+.beds{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
+.bedcell{display:grid;grid-template-columns:30px 1fr 64px;gap:4px;align-items:center;
+  border:1px solid var(--line);border-radius:8px;padding:4px;background:#fff}
+.bedcell.used{background:var(--fill);border-color:#a9cbc6}
+.bedcell .bed{font-weight:bold;text-align:center;font-size:16px}
+.bedcell select,.bedcell input{width:100%;min-width:0;height:36px;padding:4px 6px}
+.bedcell input:disabled{background:#f4f7f6}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
 .btn{border:0;border-radius:8px;padding:9px 18px;font:inherit;cursor:pointer;background:var(--main);color:#fff}
 .btn.ghost{background:#fff;color:var(--main);border:1px solid var(--main)}
 .muted{color:var(--sub);font-size:13px}
@@ -44,15 +51,34 @@ tr.used td{background:var(--fill)}
 .sum th.n{text-align:center}
 .sum tr.total td{font-weight:bold;border-top:2px solid var(--main)}
 .zero{color:#c2ccca}
-@media (max-width:600px){ select{min-width:96px} input.num{width:84px} .tabs button{padding:10px 12px} }
+@media (max-width:600px){
+  body{font-size:14px}
+  main{padding:8px}
+  .card{padding:10px;margin-bottom:8px}
+  header{padding:8px 10px}
+  header h1{font-size:17px}
+  .tabs button{padding:5px 10px}
+  #unitCard{padding:8px}
+  #unitCard h2{display:none}
+  .units{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .units::-webkit-scrollbar{display:none}
+  .units button{flex:none;padding:5px 11px}
+  .beds{grid-template-columns:1fr 1fr;gap:5px}
+  .bedcell{grid-template-columns:24px 1fr 46px;gap:3px;padding:3px}
+  .bedcell .bed{font-size:15px}
+  .bedcell select,.bedcell input{height:34px;padding:2px 3px;font-size:14px}
+  #tab-rep .bar{position:sticky;bottom:0;background:#fff;margin:8px -10px -10px;padding:8px 10px;
+    border-top:1px solid var(--line);border-radius:0 0 10px 10px}
+  .btn{padding:8px 14px}
+}
 </style>
 </head>
 <body>
-<header><h1>呼吸器點班系統</h1></header>
+<header><h1>呼吸器點班系統</h1>
 <nav class="tabs">
   <button data-tab="sum" class="on">總表</button>
   <button data-tab="rep">各單位回報</button>
-</nav>
+</nav></header>
 <main>
   <!-- 總表 -->
   <section id="tab-sum">
@@ -68,7 +94,7 @@ tr.used td{background:var(--fill)}
 
   <!-- 各單位回報 -->
   <section id="tab-rep" hidden>
-    <div class="card">
+    <div class="card" id="unitCard">
       <h2>選擇單位</h2>
       <div class="units" id="unitBtns"></div>
     </div>
@@ -111,7 +137,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   $('#tab-sum').hidden = b.dataset.tab !== 'sum';
   $('#tab-rep').hidden = b.dataset.tab !== 'rep';
-  if (b.dataset.tab === 'sum') renderSum();
+  if (b.dataset.tab === 'sum') renderSum(); else renderUnitBtns();
 });
 
 // ===== 各單位回報 =====
@@ -119,6 +145,9 @@ function renderUnitBtns(){
   $('#unitBtns').innerHTML = UNITS.map(u =>
     `<button data-u="${esc(u)}" class="${u===curUnit?'on':''} ${BEDS[u]?'':'todo'}">${esc(u)}</button>`).join('');
   $('#unitBtns').querySelectorAll('button').forEach(b => b.onclick = () => { curUnit = b.dataset.u; renderUnitBtns(); renderRep(); });
+  // 手機上單位列是橫向捲動，把目前單位捲到看得見的位置
+  const on = $('#unitBtns .on'), box = $('#unitBtns');
+  if (on) box.scrollLeft = on.offsetLeft - box.offsetLeft - (box.clientWidth - on.offsetWidth) / 2;
 }
 
 function secondField(dev, val){
@@ -126,7 +155,7 @@ function secondField(dev, val){
   if (!dev) return `<input class="num" disabled placeholder="—">`;
   if (opts.length) return `<select class="num"><option value="">請選擇</option>${
     opts.map(o => `<option ${String(o)===String(val)?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
-  return `<input class="num" type="number" inputmode="numeric" min="0" value="${esc(val||'')}" placeholder="輸入數字">`;
+  return `<input class="num" type="number" inputmode="numeric" min="0" value="${esc(val||'')}" placeholder="編號">`;
 }
 
 function renderRep(){
@@ -135,19 +164,16 @@ function renderRep(){
   if (!beds){ card.innerHTML = `<h2>${esc(curUnit)} 回報</h2><div class="empty">此單位的回報欄位尚未設定</div>`; return; }
   const saved = (DB[curUnit] && DB[curUnit].beds) || {};
   card.innerHTML = `
-    <h2>${esc(curUnit)} 回報</h2>
-    <div class="muted" id="lastTime">${DB[curUnit] ? '上次回報：' + esc(DB[curUnit].time) : '尚未回報'}</div>
-    <table id="bedTable">
-      <thead><tr><th>床號</th><th>設備</th><th>編號</th></tr></thead>
-      <tbody>${beds.map(bed => {
+    <div class="rephead"><h2>${esc(curUnit)} 回報</h2>
+      <span class="muted" id="lastTime">${DB[curUnit] ? '上次回報：' + esc(DB[curUnit].time) : '尚未回報'}</span></div>
+    <div class="beds" id="bedTable">${beds.map(bed => {
         const r = saved[bed] || {};
-        return `<tr data-bed="${esc(bed)}" class="${r.dev?'used':''}">
-          <td class="bed">${esc(bed)}</td>
-          <td><select class="dev"><option value="">— 無 —</option>${
-            DEV_NAMES.map(d => `<option ${d===r.dev?'selected':''}>${d}</option>`).join('')}</select></td>
-          <td class="sec">${secondField(r.dev, r.no)}</td></tr>`; }).join('')}
-      </tbody>
-    </table>
+        return `<div class="bedcell ${r.dev?'used':''}" data-bed="${esc(bed)}">
+          <span class="bed">${esc(bed)}</span>
+          <select class="dev" aria-label="${esc(bed)}床設備"><option value="">—</option>${
+            DEV_NAMES.map(d => `<option ${d===r.dev?'selected':''}>${d}</option>`).join('')}</select>
+          <span class="sec">${secondField(r.dev, r.no)}</span></div>`; }).join('')}
+    </div>
     <div class="bar">
       <button class="btn" id="submitBtn">送出回報</button>
       <button class="btn ghost" id="clearBtn">清空本單位</button>
@@ -155,7 +181,7 @@ function renderRep(){
     </div>`;
 
   card.querySelectorAll('select.dev').forEach(sel => sel.onchange = () => {
-    const tr = sel.closest('tr');
+    const tr = sel.closest('.bedcell');
     tr.classList.toggle('used', !!sel.value);
     tr.querySelector('.sec').innerHTML = secondField(sel.value, '');
   });
@@ -168,7 +194,7 @@ function renderRep(){
 
 function submit(){
   const beds = {};
-  document.querySelectorAll('#bedTable tbody tr').forEach(tr => {
+  document.querySelectorAll('#bedTable .bedcell').forEach(tr => {
     const dev = tr.querySelector('select.dev').value;
     const f = tr.querySelector('.sec .num');
     if (dev) beds[tr.dataset.bed] = { dev, no: f ? f.value.trim() : '' };
